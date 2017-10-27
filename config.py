@@ -63,8 +63,8 @@ DEBUG = CONFIG.getboolean(SECTION, 'debug')
 POWER_CALCULATOR.set_debug(DEBUG or VPOWER_DEBUG)
 
 # Set to None to disable ANT+ message logging
-LOG = None
-# LOG = log.LogWriter(filename="vpower.log")
+#LOG = None
+LOG = log.LogWriter(filename="vpower.log")
 
 # ANT+ network key
 NETKEY = '\xB9\xA5\x21\xFB\xBD\x72\xC3\x45'
