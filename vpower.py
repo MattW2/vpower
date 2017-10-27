@@ -5,12 +5,14 @@ from ant.core import driver
 from ant.core import node
 
 from PowerMeterTx import PowerMeterTx
+from FECTrainer import FECTrainer
 from SpeedCadenceSensorRx import SpeedCadenceSensorRx
-from config import DEBUG, LOG, NETKEY, POWER_CALCULATOR, POWER_SENSOR_ID, SENSOR_TYPE, SPEED_SENSOR_ID
+from config import DEBUG, LOG, NETKEY, POWER_CALCULATOR, POWER_SENSOR_ID, SENSOR_TYPE, SPEED_SENSOR_ID, TRAINER_SENSOR_ID
 
 antnode = None
 speed_sensor = None
 power_meter = None
+trainer = None
 
 try:
     print "Using " + POWER_CALCULATOR.__class__.__name__
@@ -22,25 +24,15 @@ try:
     key = node.NetworkKey('N:ANT+', NETKEY)
     antnode.setNetworkKey(0, key)
 
-    print "Starting speed sensor"
+    print "Starting FE-C trainer"
     try:
-        # Create the speed sensor object and open it
-        speed_sensor = SpeedCadenceSensorRx(antnode, SENSOR_TYPE, SPEED_SENSOR_ID)
-        speed_sensor.open()
-        # Notify the power calculator every time we get a speed event
-        speed_sensor.notify_change(POWER_CALCULATOR)
+        # create trainer
+        trainer = FECTrainer(antnode, TRAINER_SENSOR_ID)
+        trainer.open()
+        print "Started FE-C trainer ID " + TRAINER_SENSOR_ID
     except Exception as e:
-        print"speed_sensor  error: " + e.message
-        speed_sensor = None
-
-    print "Starting power meter with ANT+ ID " + repr(POWER_SENSOR_ID)
-    try:
-        # Create the power meter object and open it
-        power_meter = PowerMeterTx(antnode, POWER_SENSOR_ID)
-        power_meter.open()
-    except Exception as e:
-        print "power_meter error: " + e.message
-        power_meter = None
+        print "trainer error: " + e.message
+        trainer = None
 
     # Notify the power meter every time we get a calculated power value
     POWER_CALCULATOR.notify_change(power_meter)

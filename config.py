@@ -53,6 +53,10 @@ POWER_CALCULATOR.set_correction_factor(CONFIG.getfloat(SECTION, 'correction_fact
 # The expression below will choose a fixed ID based on the CPU's serial number
 POWER_SENSOR_ID = int(int(hashlib.md5(getserial()).hexdigest(), 16) & 0xfffe) + 1
 
+# ANT+ ID of the FE-C trainer
+# The expression below will choose a fixed ID based on the CPU's serial number
+TRAINER_SENSOR_ID = int(int(hashlib.md5(getserial()).hexdigest(), 16) & 0xfffe) + 2
+
 # If set to True, the stick's driver will dump everything it reads/writes from/to the stick.
 DEBUG = CONFIG.getboolean(SECTION, 'debug')
 

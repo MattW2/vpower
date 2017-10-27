@@ -2,7 +2,7 @@ SPEED_DEVICE_TYPE = 0x7B
 CADENCE_DEVICE_TYPE = 0x7A
 SPEED_CADENCE_DEVICE_TYPE = 0x79
 POWER_DEVICE_TYPE = 0x0B
-
+TRAINER_DEVICE_TYPE = 17
 
 # Get the serial number of Raspberry Pi
 def getserial():
