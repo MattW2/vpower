@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import time
+import traceback
 
 from ant.core import driver
 from ant.core import node
@@ -29,9 +30,10 @@ try:
         # create trainer
         trainer = FECTrainer(antnode, TRAINER_SENSOR_ID)
         trainer.open()
-        print "Started FE-C trainer ID " + TRAINER_SENSOR_ID
+        print "Started FE-C trainer ID %d" % (TRAINER_SENSOR_ID)
     except Exception as e:
         print "trainer error: " + e.message
+        traceback.print_exc()
         trainer = None
 
     # Notify the power meter every time we get a calculated power value
@@ -40,9 +42,13 @@ try:
     print "Main wait loop"
     while True:
         try:
-            time.sleep(1)
+            time.sleep(8192/32768)
+            trainer.sendNextMessage()
         except (KeyboardInterrupt, SystemExit):
             break
+        except Exception as e:
+            print "got me an exception yo"
+            traceback.print_exc()
 
 except Exception as e:
     print "Exception: "+repr(e)
@@ -55,6 +61,10 @@ finally:
         print "Closing power meter"
         power_meter.close()
         power_meter.unassign()
+    if trainer:
+        print "Closing trainer"
+        trainer.close()
+        trainer.unassign()
     if antnode:
         print "Stopping ANT node"
         antnode.stop()
