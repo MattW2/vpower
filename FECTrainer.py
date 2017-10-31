@@ -1,5 +1,6 @@
 import sys
 from ant.core import message
+from ant.core import event
 from ant.core.constants import *
 from ant.core.exceptions import ChannelError
 
@@ -10,14 +11,16 @@ CHANNEL_PERIOD = 8192
 
 
 # Transmitter for Bicycle Power ANT+ sensor
-class FECTrainer(object):
+class FECTrainer(event.EventCallback):
     # This needs to change, though I'm not sure to what
-    class PowerData:
+    class TrainerData:
         def __init__(self):
             self.eventCount = 0
             self.eventTime = 0
-            self.cumulativePower = 0
-            self.instantaneousPower = 0
+            self.cadence = 0
+            self.power = 0
+            self.targetPower = 0
+            self.resistance = 0
 
     def __init__(self, antnode, sensor_id):
         self.antnode = antnode
@@ -31,11 +34,19 @@ class FECTrainer(object):
             self.channel.setPeriod(CHANNEL_PERIOD)
             self.channel.setFrequency(57)
         except ChannelError as e:
-            print "Channel config error: "+e.message
-        self.powerData = FECTrainer.PowerData()
+            print "Channel config error: " + e.message
+
+        self.observer = None
+        self.trainerData = FECTrainer.TrainerData()
+        self.slot = 0
+        self.nextMessageID = 0x50
+
+    def notify_change(self, observer):
+        self.obesrver = observer
 
     def open(self):
         self.channel.open()
+        self.channel.registerCallback(self)  # -> will callback process(msg) method below
 
     def close(self):
         self.channel.close()
@@ -43,7 +54,49 @@ class FECTrainer(object):
     def unassign(self):
         self.channel.unassign()
 
-    # Power was updated, so send out an ANT+ message
+    def makeCommonPage(self, which):
+        if which == 0x50:
+            payload = chr(0x50)
+            payload += chr(0xff) + chr(0xff)  # model #
+            payload += chr(0x01)              # hw version
+            payload += chr(0xff) + chr(0x00)  # mfg id
+            payload += chr(0x00) + chr(0x01)
+        elif which == 0x51:
+            payload = chr(0x51)
+            payload += chr(0xff)
+            payload += chr(0xff)
+            payload += chr(0x01)
+            payload += chr(0xce) + chr(0xfa) + chr(0xed) + chr(0xfe)
+
+        return payload
+    
+        ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload)
+        sys.stdout.write('+')
+        sys.stdout.flush()
+        if VPOWER_DEBUG:
+            print 'Write common data page %d to ANT stick on channel %d' % (which, self.channel.number)
+        self.antnode.driver.write(ant_msg.encode())
+
+
+    def process(self, msg):
+        if isinstance(msg, message.ChannelRequestMessage):
+            which = msg.getMessageID()
+            payload = self.makeCommonPage(which)
+
+        elif isinstance(msg, message.ChannelStatusMessage):
+            if msg.getStatus() == EVENT_CHANNEL_CLOSED:
+                open()
+
+        elif isinstance(msg, message.ChannelBroadcastDataMessage):
+            pass
+
+        ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload)
+        sys.stdout.write('+')
+        sys.stdout.flush()
+        if VPOWER_DEBUG: print 'Write message to ANT stick on channel ' + repr(self.channel.number)
+        self.antnode.driver.write(ant_msg.encode())
+            
+
     def update(self, power):
         if VPOWER_DEBUG: print 'PowerMeterTx: update called with power ', power
         self.powerData.eventCount = (self.powerData.eventCount + 1) & 0xff
@@ -67,3 +120,57 @@ class FECTrainer(object):
         sys.stdout.flush()
         if VPOWER_DEBUG: print 'Write message to ANT stick on channel ' + repr(self.channel.number)
         self.antnode.driver.write(ant_msg.encode())
+
+    def sendNextMessage(self):
+        if VPOWER_DEBUG: print 'sending message in slot %d' % (self.slot)
+
+        if self.slot == 64:
+            payload = self.makeCommonPage(self.nextMessageID)
+        elif self.slot == 65:
+            payload = self.makeCommonPage(self.nextMessageID)
+            self.nextMessageID = [ 0x51, 0x50 ][self.nextMessageID - 0x50]
+        else:
+            payload = GeneralFEData().fullpage()
+
+        ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload)
+        self.antnode.driver.write(ant_msg.encode())
+            
+        self.slot += 1
+        if self.slot > 65:
+            self.slot = 0
+
+class DataPage(object):
+    def __init__(self, pagenumber):
+        self.page = chr(pagenumber) + chr(0x00) * 7
+
+    @property
+    def pageNumber(self):
+        return ord(page[0])
+
+    @pageNumber.setter
+    def pageNumber(self, num):
+        self.page = chr(num & 0xff) + self.page[1:7]
+        
+    @property
+    def data(self):
+        return self.page[1:]
+
+    @data.setter
+    def data(self, pagebytes):
+        self.page = self.page[0] + pagebytes
+
+    def fullpage(self):
+        return self.page
+
+class GeneralFEData(DataPage):
+    def __init__(self):
+        super(GeneralFEData,self).__init__(16)
+        data = chr(25) # trainer
+        data += chr(0)  # accum time
+        data += chr(0)  # accum distance
+        data += chr(0xff) + chr(0xff) # speed == invalid
+        data += chr(0xff) # hr == invalid
+        data += chr(0x0 | 0x20) # no hr, no distance, speed is real | device is READY
+        self.data = data
+    
+    
