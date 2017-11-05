@@ -40,10 +40,13 @@ try:
     POWER_CALCULATOR.notify_change(power_meter)
 
     print "Main wait loop"
+    slot = 0
     while True:
+        stick.debug = False
         try:
             time.sleep(8192/32768)
-            trainer.sendNextMessage()
+            trainer.sendNextMessage(slot)
+            slot += 1
         except (KeyboardInterrupt, SystemExit):
             break
         except Exception as e:
