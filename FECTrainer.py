@@ -38,8 +38,9 @@ class FECTrainer(event.EventCallback):
 
         self.observer = None
         self.trainerData = FECTrainer.TrainerData()
-        self.slot = 0
-        self.nextMessageID = 0x50
+        self.slot = -1
+        self.msgs = self.msgGenerator()
+        self.msgs.send(None)
 
     def notify_change(self, observer):
         self.obesrver = observer
@@ -121,18 +122,52 @@ class FECTrainer(event.EventCallback):
         if VPOWER_DEBUG: print 'Write message to ANT stick on channel ' + repr(self.channel.number)
         self.antnode.driver.write(ant_msg.encode())
 
-    def sendNextMessage(self):
+    def msgGenerator(self):
+        slot = yield
+        while True:
+            slot = (yield self.makeCommonPage(0x50))
+            slot = (yield self.makeCommonPage(0x50))
+            for x in range(10):
+                slot = (yield GeneralFEData(slot).fullpage())
+                slot = (yield SpecificTrainerData(slot).fullpage())
+                slot = (yield SpecificTrainerData(slot).fullpage())
+
+            slot = (yield self.makeCommonPage(0x51))
+            slot = (yield self.makeCommonPage(0x51))
+            slot = (yield SpecificTrainerData(slot).fullpage())
+            for x in range(10):
+                slot = (yield GeneralFEData(slot).fullpage())
+                slot = (yield SpecificTrainerData(slot).fullpage())
+                slot = (yield SpecificTrainerData(slot).fullpage())
+            slot = (yield GeneralFEData(slot).fullpage())
+
+    def nextMessage(self, slot):
+        try:
+            return self.msgs.send(slot)
+        except StopIteration as e:
+            traceback.print_exc()
+
+    def sendNextMessage(self,slot):
+        payload = self.nextMessage(slot)
+        if VPOWER_DEBUG: print 'Sending slot %d msg %x' % (slot, ord(payload[0]))
+        ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload)
+        self.antnode.driver.write(ant_msg.encode())
+        return
+
         if VPOWER_DEBUG: print 'sending message in slot %d' % (self.slot)
 
-        if self.slot == 64:
+        if self.slot == -1:
+            payload = chr(0) * 8
+            self.slot += 1
+
+        if self.slot in [0,1]:
             payload = self.makeCommonPage(self.nextMessageID)
-        elif self.slot == 65:
-            payload = self.makeCommonPage(self.nextMessageID)
-            self.nextMessageID = [ 0x51, 0x50 ][self.nextMessageID - 0x50]
-        else:
+            self.nextMessageID = [ self.nextMessageID, [ 0x51, 0x50 ][self.nextMessageID - 0x50] ][self.slot]
+            
+        elif self.slot:
             payload = GeneralFEData().fullpage()
 
-        ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload)
+        ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload.decode("ascii"))
         self.antnode.driver.write(ant_msg.encode())
             
         self.slot += 1
@@ -145,7 +180,7 @@ class DataPage(object):
 
     @property
     def pageNumber(self):
-        return ord(page[0])
+        return ord(self.page[0])
 
     @pageNumber.setter
     def pageNumber(self, num):
@@ -162,11 +197,17 @@ class DataPage(object):
     def fullpage(self):
         return self.page
 
+class SpecificTrainerData(DataPage):
+    def __init__(self, slot):
+        super(SpecificTrainerData,self).__init__(25)
+        msg = [slot & 0xff, 0xff, 0x00, 0x00, 0x00, 0x02 | 0x20, 0x00]
+        self.data = ''.join(map(chr, msg))
+
 class GeneralFEData(DataPage):
-    def __init__(self):
+    def __init__(self, slot):
         super(GeneralFEData,self).__init__(16)
         data = chr(25) # trainer
-        data += chr(0)  # accum time
+        data += chr(slot & 0xff)  # accum time
         data += chr(0)  # accum distance
         data += chr(0xff) + chr(0xff) # speed == invalid
         data += chr(0xff) # hr == invalid
