@@ -65,30 +65,6 @@ class FECTrainer(event.EventCallback):
     def unassign(self):
         self.channel.unassign()
 
-    def makeCommonPage(self, which):
-        if which == 0x50:
-            payload = chr(0x50)
-            payload += chr(0xff) + chr(0xff)  # model #
-            payload += chr(0x01)              # hw version
-            payload += chr(0xff) + chr(0x00)  # mfg id
-            payload += chr(0x00) + chr(0x01)
-        elif which == 0x51:
-            payload = chr(0x51)
-            payload += chr(0xff)
-            payload += chr(0xff)
-            payload += chr(0x01)
-            payload += chr(0xce) + chr(0xfa) + chr(0xed) + chr(0xfe)
-
-        return payload
-    
-        ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload)
-        sys.stdout.write('+')
-        sys.stdout.flush()
-        if VPOWER_DEBUG:
-            print 'Write common data page %d to ANT stick on channel %d' % (which, self.channel.number)
-        self.antnode.driver.write(ant_msg.encode())
-
-
     def process(self, msg):
         if VPOWER_DEBUG: print "process called with msg " + dir(msg)
         
@@ -142,8 +118,8 @@ class FECTrainer(event.EventCallback):
     def msgGenerator(self):
         slot = yield
         while True:
-            slot = (yield self.makeCommonPage(0x50))
-            slot = (yield self.makeCommonPage(0x50))
+            slot = (yield CommonPage(0x50).fullpage())
+            slot = (yield CommonPage(0x50).fullpage())
             for x in range(10):
                 slot = (yield GeneralFEData(slot).fullpage())
                 slot = (yield SpecificTrainerData(slot).fullpage())
@@ -209,11 +185,33 @@ class DataPage(object):
 
     @data.setter
     def data(self, pagebytes):
-        self.page = self.page[0] + pagebytes
+        if isinstance(pagebytes, list):
+            pb = ''.join(map(chr,pagebytes))
+        else:
+            pb = pagebytes
+            
+        self.page = self.page[0] + pb
 
     def fullpage(self):
         return self.page
 
+class CommonPage(DataPage):
+    def __init__(self, which):
+        super(CommonPage,self).__init__(which)
+        if which == 0x50:
+            msg = [ 0xff, 0xff, # model #
+                    0x01,       # hardware version
+                    0xff, 0x00, # mfg id
+                    0x00, 0x01 ]
+        elif which == 0x51:
+            msg = [ 0xff,
+                    0xff,
+                    0x01,
+                    0xce, 0xfa, 0xed, 0xfe ]
+        self.data = msg
+        return
+        self.data = ''.join(map(chr, msg))
+        
 class SpecificTrainerData(DataPage):
     def __init__(self, slot):
         super(SpecificTrainerData,self).__init__(25)
