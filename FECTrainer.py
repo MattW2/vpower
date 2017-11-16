@@ -147,26 +147,6 @@ class FECTrainer(event.EventCallback):
         self.antnode.driver.write(ant_msg.encode())
         return
 
-        if VPOWER_DEBUG: print 'sending message in slot %d' % (self.slot)
-
-        if self.slot == -1:
-            payload = chr(0) * 8
-            self.slot += 1
-
-        if self.slot in [0,1]:
-            payload = self.makeCommonPage(self.nextMessageID)
-            self.nextMessageID = [ self.nextMessageID, [ 0x51, 0x50 ][self.nextMessageID - 0x50] ][self.slot]
-            
-        elif self.slot:
-            payload = GeneralFEData().fullpage()
-
-        ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload.decode("ascii"))
-        self.antnode.driver.write(ant_msg.encode())
-            
-        self.slot += 1
-        if self.slot > 65:
-            self.slot = 0
-
 class DataPage(object):
     def __init__(self, pagenumber):
         self.page = chr(pagenumber) + chr(0x00) * 7
