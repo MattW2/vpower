@@ -116,37 +116,39 @@ class FECTrainer(event.EventCallback):
         self.antnode.driver.write(ant_msg.encode())
 
     def msgGenerator(self):
-        slot = yield
+        td = yield
         while True:
             slot = (yield CommonPage(0x50).fullpage())
             slot = (yield CommonPage(0x50).fullpage())
             for x in range(10):
-                slot = (yield GeneralFEData(slot).fullpage())
-                slot = (yield SpecificTrainerData(slot).fullpage())
-                slot = (yield SpecificTrainerData(slot).fullpage())
+                slot = (yield GeneralFEData(td).fullpage())
+                slot = (yield SpecificTrainerData(td).fullpage())
+                slot = (yield SpecificTrainerData(td).fullpage())
 
-            slot = (yield self.makeCommonPage(0x51))
-            slot = (yield self.makeCommonPage(0x51))
-            slot = (yield SpecificTrainerData(slot).fullpage())
+            slot = (yield CommonPage(0x51).fullpage())
+            slot = (yield CommonPage(0x51).fullpage())
+            slot = (yield SpecificTrainerData(td).fullpage())
             for x in range(10):
-                slot = (yield GeneralFEData(slot).fullpage())
-                slot = (yield SpecificTrainerData(slot).fullpage())
-                slot = (yield SpecificTrainerData(slot).fullpage())
-            slot = (yield GeneralFEData(slot).fullpage())
+                slot = (yield GeneralFEData(td).fullpage())
+                slot = (yield SpecificTrainerData(td).fullpage())
+                slot = (yield SpecificTrainerData(td).fullpage())
+            slot = (yield GeneralFEData(td).fullpage())
 
-    def nextMessage(self, slot):
+    def nextMessage(self):
         try:
-            return self.msgs.send(slot)
+            return self.msgs.send(self.trainerData)
         except StopIteration as e:
             traceback.print_exc()
 
     def sendNextMessage(self,slot):
-        payload = self.nextMessage(slot)
+        self.trainerData.eventCount = slot
+        payload = self.nextMessage()
         if VPOWER_DEBUG: print 'Sending slot %d msg %x' % (slot, ord(payload[0]))
         ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload)
         self.antnode.driver.write(ant_msg.encode())
         return
 
+# move to its own file?
 class DataPage(object):
     def __init__(self, pagenumber):
         self.page = chr(pagenumber) + chr(0x00) * 7
@@ -189,24 +191,40 @@ class CommonPage(DataPage):
                     0x01,
                     0xce, 0xfa, 0xed, 0xfe ]
         self.data = msg
-        return
-        self.data = ''.join(map(chr, msg))
         
 class SpecificTrainerData(DataPage):
-    def __init__(self, slot):
-        super(SpecificTrainerData,self).__init__(25)
-        msg = [slot & 0xff, 0xff, 0x00, 0x00, 0x00, 0x02 | 0x20, 0x00]
-        self.data = ''.join(map(chr, msg))
+    PAGE = 25
+    def __init__(self, trainerData):
+        super(SpecificTrainerData,self).__init__(self.PAGE)
+        slot = trainerData.eventCount
+        msg = [slot & 0xff,
+               0xff, 0x00, 0x00, 0xff, 0x0f | 0x20, 0x30]
+        self.data = msg
 
 class GeneralFEData(DataPage):
-    def __init__(self, slot):
-        super(GeneralFEData,self).__init__(16)
-        data = chr(25) # trainer
-        data += chr(slot & 0xff)  # accum time
-        data += chr(0)  # accum distance
-        data += chr(0xff) + chr(0xff) # speed == invalid
-        data += chr(0xff) # hr == invalid
-        data += chr(0x0 | 0x20) # no hr, no distance, speed is real | device is READY
-        self.data = data
+    PAGE = 16
+    def __init__(self, trainerData):
+        super(GeneralFEData,self).__init__(self.PAGE)
+        slot = trainerData.eventCount
+        msg = [ slot & 0xff,  # accumulated time
+                0,            # accumulated distance
+                0xff, 0xff,   # speed (0xffff == invalid)
+                0x0 | 0x20    # no hr, no distance, speed is real | device is READY
+                ]
+        self.data = msg
     
-    
+class FECapabilities(DataPage):
+    PAGE = 54
+    def __init__(self, trainerData):
+        super(FECapabilities, self).__init__(self.PAGE)
+        slot = trainerData.eventCount
+        msg = [ 0xff, 0xff, 0xff, 0xff,  # reserved future use
+                0xff, 0xff,              # max resistance in newtons (0xffff == invalid)
+                # capabilities:
+                # bit 0:  0/1 supports basic resistance mode
+                # bit 1:  0/1 supports target power mode
+                # bit 2:  0/1 supports simulation mode
+                # bit 3-7: future reserved (0)
+                0b11100000
+                ]
+        self.data = msg
