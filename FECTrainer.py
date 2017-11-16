@@ -12,15 +12,25 @@ CHANNEL_PERIOD = 8192
 
 # Transmitter for Bicycle Power ANT+ sensor
 class FECTrainer(event.EventCallback):
-    # This needs to change, though I'm not sure to what
+    # current state of our virtual FE-C trainer
+    # this should mirror the state the of the computrainer
     class TrainerData:
         def __init__(self):
             self.eventCount = 0
             self.eventTime = 0
             self.cadence = 0
-            self.power = 0
+            self.speed = 0
+            self.speed_is_virtual = False
+            self.accumulated_power = 0
+            self.instantaneous_power = 0
             self.targetPower = 0
             self.resistance = 0
+            self.power_cal_needed = False
+            self.resistance_cal_needed = True
+            self.target_power_limits = 0
+            self.state = 0   # see sec 6.5.2.7, table 6-10
+            self.lap = 0     # flips btw. 0 and 1 to indicate a lap event
+
 
     def __init__(self, antnode, sensor_id):
         self.antnode = antnode
