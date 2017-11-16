@@ -90,6 +90,8 @@ class FECTrainer(event.EventCallback):
 
 
     def process(self, msg):
+        if VPOWER_DEBUG: print "process called with msg " + dir(msg)
+        
         if isinstance(msg, message.ChannelRequestMessage):
             which = msg.getMessageID()
             payload = self.makeCommonPage(which)
@@ -99,7 +101,12 @@ class FECTrainer(event.EventCallback):
                 open()
 
         elif isinstance(msg, message.ChannelBroadcastDataMessage):
+            if VPOWER_DEBUG: print "Rx: ", ':'.join(x.encode('hex') for x in msg.getPayload())
             pass
+
+        elif isinstance(msg, message.ChannelAcknowledgeDataMessage):
+            if VPOWER_DEBUG: print "Rx: ", ':'.join(x.encode('hex') for x in msg.getPayload())
+            return
 
         ant_msg = message.ChannelBroadcastDataMessage(self.channel.number, data=payload)
         sys.stdout.write('+')
